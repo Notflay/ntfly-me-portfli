@@ -1,0 +1,255 @@
+---
+import { getCollection } from 'astro:content';
+import Base from '../layouts/Base.astro';
+
+const proyectos = (await getCollection('proyectos')).sort((a, b) => a.data.orden - b.data.orden);
+
+// Mapa del inicio: cada fila es un flujo real de los proyectos (origen → integración → destino).
+const flujos = [
+  { nombre: 'Nómina PTP', origen: 'SuccessFactors EC', via: 'Replicación PTP', destino: 'SuccessFactors ECP' },
+  { nombre: 'Salud ocupacional', origen: 'API externa', via: 'SAP CPI', destino: 'SuccessFactors MDF' },
+  { nombre: 'Despacho por escaneo', origen: 'Portal React', via: 'Service Layer', destino: 'SAP Business One' },
+  { nombre: 'Conciliación SIRE', origen: 'SUNAT SIRE', via: 'App C# .NET', destino: 'SAP Business One' },
+  { nombre: 'Bot de consultas', origen: 'Telegram', via: 'n8n + Gemini', destino: 'Respuesta en el chat' },
+];
+
+// Repositorios fijados en GitHub.
+const repos = [
+  { nombre: 'sapb1-connection-basic', lenguaje: 'C#', texto: 'Conector básico para trabajar con SAP Business One a través de Service Layer.' },
+  { nombre: 'sapb1-customers-sync', lenguaje: 'C#', texto: 'Sincronización de clientes hacia SAP Business One a partir de archivos CSV.' },
+  { nombre: 'sapb1-orders-integration', lenguaje: 'C#', texto: 'Servicio que crea órdenes de venta en SAP Business One.' },
+  { nombre: 'sapb1-stock-check', lenguaje: 'JavaScript', texto: 'Consulta de inventario de SAP Business One, con su implementación en ASP.NET Web API.' },
+];
+const GITHUB = 'https://github.com/Notflay';
+
+// Certificación verificable en Credly.
+const CERT = {
+  nombre: 'SAP Certified – Integration Developer',
+  emisor: 'SAP',
+  url: 'https://www.credly.com/badges/4a93431f-5c94-4a97-8f96-f1026ffdf4e6',
+  insignia: 'https://images.credly.com/images/a4b6c832-f3f3-46ce-88de-9405aa0fa389/linkedin_thumb_blob',
+};
+---
+<Base
+  title="Sebastián Poma | Integrador SAP: Business One, SuccessFactors y CPI"
+  description="Desarrollador e integrador SAP. Integraciones con SAP CPI, Business One (Service Layer, DI API), SuccessFactors y SUNAT SIRE, y automatizaciones con n8n e IA."
+>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Integrador SAP · Business One · SuccessFactors · CPI</p>
+        <h1>Integro sistemas SAP para que los datos lleguen completos y a tiempo.</h1>
+        <p class="lead">
+          Desarrollador e integrador SAP con más de 2 años en proyectos con Business One,
+          SuccessFactors (EC y ECP) y CPI. Diseño integraciones que cuidan la consistencia y la
+          seguridad de los datos, y automatizo procesos con n8n e IA.
+        </p>
+        <div class="actions">
+          <a class="btn primary" href="#proyectos">Ver proyectos</a>
+          <a class="btn ghost" href="mailto:sebastian.srrr@gmail.com">Escribirme</a>
+        </div>
+        <p class="social">
+          <a href="https://www.linkedin.com/in/sebastian-poma/" rel="noopener">LinkedIn ↗</a>
+          <a href={GITHUB} rel="noopener">GitHub ↗</a>
+        </p>
+      </div>
+
+      <figure class="int-map">
+        <figcaption class="map-head">
+          <span>Mapa de integraciones</span>
+          <span class="map-legend" aria-hidden="true">origen → integración → destino</span>
+        </figcaption>
+        <ol class="flows">
+          {flujos.map((f) => (
+            <li class="flow">
+              <span class="flow-name">{f.nombre}</span>
+              <div class="flow-row">
+                <span class="node">{f.origen}</span>
+                <span class="pipe" aria-hidden="true"><i></i></span>
+                <span class="sr">, a través de </span>
+                <span class="node hub">{f.via}</span>
+                <span class="pipe" aria-hidden="true"><i></i></span>
+                <span class="sr">, hacia </span>
+                <span class="node">{f.destino}</span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </figure>
+    </div>
+
+    <div class="wrap">
+      <ul class="kpis">
+        <li><strong>+2 años</strong><span>integrando sistemas SAP</span></li>
+        <li><strong>+10,000</strong><span>registros por carga batch</span></li>
+        <li><strong>{proyectos.length} casos</strong><span>documentados con detalle técnico</span></li>
+        <li><a class="kpi-link" href={CERT.url} rel="noopener"><strong>SAP Certified</strong><span>Integration Developer ↗</span></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="proyectos">
+    <div class="wrap">
+      <h2>Proyectos</h2>
+      <p class="muted">Casos con documentación técnica. Los clientes están anonimizados y las capturas usan datos de demostración.</p>
+
+      {proyectos.map((p) => (
+        <article class="proj">
+          <div>
+            {p.data.flujo && (
+              <p class="chain">
+                {p.data.flujo.map((n, i) => (
+                  <>
+                    {i > 0 && <span class="arrow" aria-hidden="true">→</span>}
+                    <span class={i === 1 ? 'hub' : undefined}>{n}</span>
+                  </>
+                ))}
+              </p>
+            )}
+            <h3><a href={`/proyectos/${p.id}/`}>{p.data.titulo}</a></h3>
+            <p class="tagline">{p.data.destacado}</p>
+            <p>{p.data.resumen}</p>
+            <ul class="tags">{p.data.etiquetas.map((t) => <li>{t}</li>)}</ul>
+            <p style="margin-top:16px"><a href={`/proyectos/${p.id}/`}>Ver el caso completo</a></p>
+          </div>
+          {p.data.imagen && (
+            <a href={`/proyectos/${p.id}/`} tabindex="-1" aria-hidden="true">
+              <img src={p.data.imagen} alt={p.data.imagenAlt ?? ''} loading="lazy" />
+            </a>
+          )}
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section id="automatizacion">
+    <div class="wrap">
+      <h2>IA y automatización</h2>
+      <p class="muted">Además de SAP, construyo automatizaciones con n8n y modelos de IA.</p>
+
+      <div class="ai-grid">
+        <article class="ai-card">
+          <p class="eyebrow">Bot de consultas</p>
+          <h3>Asistente en Telegram con n8n y Google Gemini</h3>
+          <p>
+            Un bot de Telegram que responde consultas en lenguaje natural. n8n orquesta el flujo
+            y Gemini interpreta la pregunta y redacta la respuesta.
+          </p>
+          <!-- TODO: agrega qué se podía consultar (p. ej. stock, documentos o estado de pedidos)
+               y un resultado concreto (tiempo ahorrado, consultas al día, usuarios). -->
+          <ol class="steps">
+            <li><strong>Telegram</strong><span>El usuario escribe su pregunta al bot.</span></li>
+            <li><strong>n8n</strong><span>Recibe el mensaje y arma el contexto de la consulta.</span></li>
+            <li><strong>Gemini</strong><span>Interpreta la consulta y genera la respuesta.</span></li>
+            <li><strong>Telegram</strong><span>n8n devuelve la respuesta en el mismo chat.</span></li>
+          </ol>
+        </article>
+
+        <div class="ai-side">
+          <h3>Lo que aplico</h3>
+          <ul class="checks">
+            <li>Automatización de procesos con flujos en n8n</li>
+            <li>Modelos de IA (Google Gemini) dentro de los flujos</li>
+            <li>Bots de Telegram como canal de consulta</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3 class="sub" id="codigo">Código en GitHub</h3>
+      <ul class="repos">
+        {repos.map((r) => (
+          <li>
+            <a href={`${GITHUB}/${r.nombre}`} rel="noopener">
+              <span class="repo-name">{r.nombre}</span>
+              <span class="repo-text">{r.texto}</span>
+              <span class="repo-lang">{r.lenguaje}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p><a href={GITHUB} rel="noopener">Ver todos los repositorios en GitHub</a></p>
+    </div>
+  </section>
+
+  <section id="sobre-mi">
+    <div class="wrap">
+      <h2>Sobre mí</h2>
+      <div class="about">
+        <img
+          class="about-photo"
+          src="/img/sebastian-poma.webp"
+          alt="Retrato de Sebastián Poma, sonriente, con camisa oscura sobre fondo gris claro"
+          width="600"
+          height="600"
+          loading="lazy"
+          decoding="async"
+        />
+        <div class="about-text">
+          <p>
+            Diseño y desarrollo integraciones entre sistemas para optimizar procesos de negocio y
+            garantizar la consistencia y la seguridad de los datos. He trabajado con cargas
+            masivas de más de 10,000 registros, interfaces entre Employee Central y ECP, y
+            procesos que cruzan SAP con servicios externos.
+          </p>
+          <p>
+            Lo que me diferencia es que conecto lo técnico con lo funcional: entiendo el proceso del
+            negocio antes de construir la solución, y me enfoco en automatizar y optimizar.
+          </p>
+          <a class="cert" href={CERT.url} rel="noopener">
+            <img
+              class="cert-badge"
+              src={CERT.insignia}
+              alt={`Insignia ${CERT.nombre}`}
+              width="88"
+              height="88"
+              loading="lazy"
+              onerror="this.remove()"
+            />
+            <span class="cert-body">
+              <span class="cert-kicker">Certificación oficial · {CERT.emisor}</span>
+              <strong class="cert-name">{CERT.nombre}</strong>
+              <span class="cert-text">Valida los conocimientos fundamentales del perfil de desarrollador de integraciones SAP.</span>
+              <span class="cert-link">Verificar en Credly ↗</span>
+            </span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="stack">
+    <div class="wrap">
+      <h2>Stack</h2>
+      <div class="stack-grid">
+        <div>
+          <h3>Integración</h3>
+          <ul><li>SAP CPI (iFlows)</li><li>Service Layer</li><li>DI API</li><li>Integración PTP (EC → ECP)</li></ul>
+        </div>
+        <div>
+          <h3>Sistemas SAP</h3>
+          <ul><li>SAP Business One</li><li>SuccessFactors EC</li><li>SuccessFactors ECP</li><li>ABAP</li></ul>
+        </div>
+        <div>
+          <h3>IA y automatización</h3>
+          <ul><li>n8n</li><li>Google Gemini</li><li>Bots de Telegram</li></ul>
+        </div>
+        <div>
+          <h3>Prácticas</h3>
+          <ul><li>Procesos batch masivos</li><li>Manejo de errores y reintentos</li><li>Consistencia y seguridad de datos</li><li>Cumplimiento SUNAT (SIRE)</li></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="contacto">
+    <div class="wrap">
+      <h2>Contacto</h2>
+      <p>¿Tienes una integración pendiente o un proyecto SAP? Escríbeme.</p>
+      <div class="actions">
+        <a class="btn primary" href="mailto:sebastian.srrr@gmail.com">sebastian.srrr@gmail.com</a>
+        <a class="btn ghost" href="https://www.linkedin.com/in/sebastian-poma/" rel="noopener">LinkedIn</a>
+        <a class="btn ghost" href={GITHUB} rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </section>
+</Base>

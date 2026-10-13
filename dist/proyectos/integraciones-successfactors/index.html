@@ -1,0 +1,284 @@
+<!DOCTYPE html><html lang="es"> <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Integraciones de SuccessFactors con SAP CPI | Sebastián Poma</title><meta name="description" content="Dos soluciones en SAP CPI: un proceso diario que trae certificados y resultados de vigilancia médica desde una API externa hacia objetos MDF, y un servicio que expone los empleados activos como un JSON simple."><meta name="color-scheme" content="light dark"><script>
+      // Aplica el tema guardado antes de pintar, para que no parpadee.
+      try {
+        var t = localStorage.getItem('tema');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script><meta property="og:title" content="Integraciones de SuccessFactors con SAP CPI | Sebastián Poma"><meta property="og:description" content="Dos soluciones en SAP CPI: un proceso diario que trae certificados y resultados de vigilancia médica desde una API externa hacia objetos MDF, y un servicio que expone los empleados activos como un JSON simple."><meta property="og:type" content="website"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/_astro/index.DSAq2taL.css"></head> <body> <a class="skip" href="#contenido">Saltar al contenido</a> <header class="nav"> <div class="wrap"> <a class="brand" href="/">Sebastián Poma</a> <nav aria-label="Principal"> <a href="/#proyectos" aria-current="page">Proyectos</a> <a href="/#automatizacion">IA y automatización</a> <a href="/#sobre-mi">Sobre mí</a> <a href="/#contacto">Contacto</a> <a href="https://github.com/Notflay" rel="noopener">GitHub</a> <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Cambiar a modo oscuro"> <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.7 14.3A8.5 8.5 0 0 1 9.7 3.3a.7.7 0 0 0-.9-.9A10 10 0 1 0 21.6 15.2a.7.7 0 0 0-.9-.9Z"></path></svg> <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"></path></g></svg> </button> </nav> </div> </header> <main id="contenido"> <div class="case-head"> <a class="back" href="/#proyectos">← Todos los proyectos</a> <h1 style="margin-top:16px">Integraciones de SuccessFactors con SAP CPI</h1> <p class="tagline">Una sincronización diaria multi-compañía con una API externa, y una API de empleados expuesta desde SuccessFactors.</p> <ul class="tags"><li>SAP CPI</li><li>iFlows</li><li>SuccessFactors OData</li><li>MDF</li><li>Groovy</li><li>XSLT</li><li>OAuth2</li></ul> </div> <article class="prose"><p>Dos soluciones que cubren las dos direcciones de una integración: <strong>consumir</strong> una API externa para grabar datos en SuccessFactors, y <strong>exponer</strong> datos de SuccessFactors como una API.</p>
+<p>El cliente y la entidad externa están anonimizados, y no se muestran nombres de iFlows, URLs, credenciales ni datos de personas.</p>
+<h2 id="proyecto-1-sincronización-con-una-api-externa-de-salud-ocupacional">Proyecto 1: sincronización con una API externa de salud ocupacional</h2>
+<p>Un proceso en <strong>SAP CPI</strong> que, cada madrugada, trae certificados de exámenes y resultados de vigilancia médica desde una API externa y los graba en objetos personalizados <strong>MDF</strong> de SuccessFactors Employee Central.</p>
+<p><strong>Qué resuelve.</strong> Esa información vivía solo en el sistema externo y había que consultarla y cargarla a mano. La integración:</p>
+<ul>
+<li>trae los datos de cada compañía y los <strong>asocia al trabajador correcto</strong> usando su RUT,</li>
+<li>los graba <strong>sin duplicar</strong> registros aunque el proceso se reejecute,</li>
+<li>funciona para <strong>varias compañías</strong> con credenciales distintas, sin duplicar iFlows.</li>
+</ul>
+<h3 id="arquitectura">Arquitectura</h3>
+<p>Seis artefactos separados por responsabilidad; los procesos principales se conectan con los auxiliares mediante <strong>ProcessDirect</strong>.</p>
+<pre><code class="language-mermaid">flowchart LR
+    T(["Timer diario"]) --> P
+    subgraph CPI["SAP CPI"]
+        P["iFlow de proceso&#x3C;br/>Certificados / Vigilancia"]
+        E["iFlow de empresas"]
+        K["iFlow de token"]
+        VM[("Value Mapping&#x3C;br/>credenciales por compañía")]
+        P -- "ProcessDirect" --> E
+        P -- "ProcessDirect" --> K
+        K --> VM
+    end
+    E --> SF[("SuccessFactors EC")]
+    P --> SF
+    K --> API[["API externa"]]
+    P --> API
+</code></pre>
+<p>Los procesos leen empleados y graban los MDF en SuccessFactors, y consultan certificados y resultados en la API externa; el iFlow de token se encarga solo de autenticarse contra ella.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Artefacto</th><th>Responsabilidad</th></tr></thead><tbody><tr><td>iFlow de empresas</td><td>Consulta las compañías en SuccessFactors y las expone por ProcessDirect para reutilizarlas</td></tr><tr><td>iFlow de token</td><td>Obtiene el token OAuth2 de la API externa para una compañía concreta</td></tr><tr><td>Value Mapping</td><td>Guarda, por compañía, los parámetros de autenticación y conexión</td></tr><tr><td>iFlow de certificados</td><td>Proceso diario: lee empleados, consulta certificados, los empareja y los graba en el MDF</td></tr><tr><td>iFlow de certificados (carga masiva)</td><td>Variante para cargas históricas por rango de fechas, ejecutada una sola vez</td></tr><tr><td>iFlow de resultados de vigilancia</td><td>Proceso diario equivalente, con otro MDF de destino</td></tr></tbody></table>
+<h3 id="flujo-del-proceso-diario">Flujo del proceso diario</h3>
+<pre><code class="language-mermaid">flowchart TD
+    A(["Timer diario, de madrugada"]) --> B{"¿Se indicó una&#x3C;br/>compañía específica?"}
+    B -- "Sí" --> D
+    B -- "No" --> C["Obtener todas las compañías&#x3C;br/>desde SuccessFactors"]
+    C --> D["Por cada compañía"]
+    D --> E["Obtener token&#x3C;br/>ProcessDirect"]
+    E --> F{"¿Token válido?"}
+    F -- "No" --> X1(["Se omite la compañía&#x3C;br/>y queda registrado"])
+    F -- "Sí" --> G["Leer empleados y extraer su RUT"]
+    G --> H{"¿Hay empleados?"}
+    H -- "No" --> X2(["Fin"])
+    H -- "Sí" --> I["Consultar certificados&#x3C;br/>en la API externa"]
+    I --> K["Por cada certificado"]
+    K --> L["Buscar al trabajador por RUT&#x3C;br/>entre los empleados de SuccessFactors"]
+    L --> M{"¿Se encontró?"}
+    M -- "No" --> X3(["Se descarta y se registra"])
+    M -- "Sí" --> N["Consultar el MDF existente&#x3C;br/>y calcular la secuencia"]
+    N --> O{"¿Tipo permitido?"}
+    O -- "No" --> X4(["No se graba"])
+    O -- "Sí" --> P["Mapear y hacer UPSERT en MDF"]
+</code></pre>
+<ol>
+<li><strong>Disparo y alcance.</strong> Un timer diario inicia el proceso. Un parámetro permite ejecutarlo para una sola compañía (útil para reprocesos) o para todas.</li>
+<li><strong>Autenticación por compañía.</strong> Las credenciales salen del Value Mapping y el iFlow de token obtiene el token OAuth2.</li>
+<li><strong>Lectura de empleados.</strong> Se leen con su documento de identidad y, mediante XSLT, se extrae solo el RUT.</li>
+<li><strong>Consulta a la API externa</strong>, con el rango de fechas como parámetro.</li>
+<li><strong>Emparejamiento por RUT</strong> de cada certificado con su empleado.</li>
+<li><strong>Grabado sin duplicados</strong> (ver decisiones técnicas).</li>
+<li><strong>Trazabilidad:</strong> cada etapa deja adjuntos en el monitor de mensajes, identificados por compañía.</li>
+</ol>
+<h3 id="resultados-de-vigilancia-médica">Resultados de vigilancia médica</h3>
+<p>Mismo patrón, con estas diferencias:</p>
+<ul>
+<li>La respuesta llega en formato <strong>OData (Atom)</strong> y se transforma con <strong>XSLT</strong> a una estructura plana.</li>
+<li>Las fechas llegan en formato <em>epoch</em> (<code>/Date(1700000000000)/</code>). Un script Groovy las convierte a fecha local en la zona horaria <strong>America/Santiago</strong>, para que el día no se desplace por el cambio de huso.</li>
+<li>Si un RUT de la respuesta no existe en SuccessFactors, queda un log claro y el proceso <strong>continúa con el resto</strong>.</li>
+<li>El destino es un MDF distinto, con su propio mapping de campos.</li>
+</ul>
+<h3 id="decisiones-técnicas">Decisiones técnicas</h3>
+<p><strong>Un iFlow de token reutilizable.</strong> La autenticación vive en un solo iFlow expuesto por ProcessDirect: un cambio se hace en un lugar y todos los procesos lo heredan. Los parámetros del formulario se codifican en URL con un script antes de enviarse como <code>application/x-www-form-urlencoded</code>.</p>
+<p><strong>Credenciales por compañía en Value Mapping.</strong> La clave combina el código de compañía con un sufijo de país y se leen todos los valores en una sola pasada. Sumar una compañía es <strong>agregar filas al Value Mapping</strong>, sin tocar ni redesplegar ningún iFlow. Si falta un valor obligatorio, el script falla con un error que indica la compañía, en lugar de seguir con datos incompletos.</p>
+<p><strong>Emparejamiento robusto por RUT.</strong> El RUT llega en formatos distintos entre sistemas: con o sin puntos, con o sin cero inicial, y con dígito verificador <code>K</code> en mayúscula o minúscula. La lógica quita los puntos, prueba también con un cero a la izquierda y, en la carga masiva, normaliza a mayúsculas para no perder trabajadores cuyo dígito verificador es <code>K</code>.</p>
+<p><strong>Grabado sin duplicados (idempotencia).</strong> Los MDF con varios registros por empleado usan una secuencia de transacción. El script busca en el MDF un registro con el mismo <strong>folio</strong>: si existe, <strong>reutiliza su secuencia</strong> y actualiza; si no existe, toma la <strong>última secuencia más uno</strong> y crea; si el empleado no tiene registros, empieza en 1. Reejecutar el proceso o repetir una ventana de fechas no genera duplicados.</p>
+<p><strong>Carga masiva separada del proceso diario.</strong> La carga histórica reutiliza la lógica con otra configuración: se ejecuta <strong>una sola vez</strong> y con un rango de fechas por parámetros, así se puede cargar por períodos acotados para no saturar la API ni CPI.</p>
+<p><strong>Todo parametrizado.</strong> URLs, tipo de autenticación, credenciales y fechas son parámetros externalizados, así que el mismo paquete pasa de pruebas a producción cambiando solo la configuración.</p>
+<h3 id="manejo-de-errores-y-observabilidad">Manejo de errores y observabilidad</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Situación</th><th>Cómo se maneja</th></tr></thead><tbody><tr><td>Credenciales incompletas para una compañía</td><td>Error explícito con la compañía; no se consulta la API</td></tr><tr><td>Sin token</td><td>Se omite esa compañía sin detener a las demás</td></tr><tr><td>Compañía sin empleados</td><td>La rama termina sin llamar a la API</td></tr><tr><td>Certificado o paciente sin empleado en SuccessFactors</td><td>Se descarta con un log que indica el RUT no encontrado</td></tr><tr><td>Caracteres especiales de la conversión JSON a XML</td><td>Un script los limpia antes de procesar</td></tr><tr><td>Seguimiento en operación</td><td>Adjuntos en el monitor de CPI con request y response de ambos sistemas, por compañía, y la cantidad de certificados recibidos</td></tr><tr><td>Nivel de log</td><td>Un parámetro activa los logs detallados solo cuando se necesitan</td></tr></tbody></table>
+<h2 id="proyecto-2-api-de-empleados-expuesta-desde-successfactors">Proyecto 2: API de empleados expuesta desde SuccessFactors</h2>
+<p>Un iFlow que publica un <strong>endpoint HTTPS</strong> para que un sistema externo consulte los <strong>empleados activos</strong> de SuccessFactors. En lugar de que el consumidor entienda la estructura de SuccessFactors, recibe un <strong>JSON simple y estable</strong> con solo lo que necesita.</p>
+<p><strong>Qué resuelve.</strong> SuccessFactors devuelve respuestas muy anidadas (persona, datos personales, correos, puesto, unidad de negocio) con cientos de campos. El iFlow actúa como <strong>capa de traducción</strong>: consulta lo necesario, limpia y entrega un contrato corto.</p>
+<pre><code class="language-mermaid">flowchart TD
+    EXT[["Sistema externo"]] -- "HTTPS con rol de CPI" --> S(["Endpoint HTTPS"])
+    S --> P["Parametrización&#x3C;br/>tipo de correo y formato JSON"]
+    P --> Q["Consulta OData a SuccessFactors&#x3C;br/>solo empleados activos"]
+    Q --> G["Script Groovy&#x3C;br/>estructura la respuesta"]
+    G --> J["Conversión XML a JSON"]
+    J --> R(["Respuesta JSON"])
+    SF[("SuccessFactors EC")] --- Q
+</code></pre>
+<ol>
+<li><strong>Entrada segura.</strong> El endpoint exige autenticación basada en roles de CPI y tiene protección CSRF activada.</li>
+<li><strong>Parametrización.</strong> Fija la respuesta como JSON y toma de un parámetro <strong>qué tipo de correo</strong> entregar (corporativo o personal), sin tocar código.</li>
+<li><strong>Consulta OData</strong> a <code>EmpEmployment</code>, expandiendo persona, datos personales, correos, puesto y unidad de negocio, con un filtro que deja <strong>solo empleados activos</strong>. El filtro se aplica en el servidor de SuccessFactors, no en CPI, para mover menos datos.</li>
+<li><strong>Script Groovy</strong> que reduce la respuesta a un objeto plano por empleado.</li>
+<li><strong>Conversión a JSON</strong> y respuesta al consumidor.</li>
+</ol>
+<h3 id="lógica-de-transformación">Lógica de transformación</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Campo entregado</th><th>Cómo se obtiene</th></tr></thead><tbody><tr><td><code>Codigo</code></td><td>Identificador del empleado en SuccessFactors</td></tr><tr><td><code>Nombres</code></td><td>Nombre de pila</td></tr><tr><td><code>Apellidos</code></td><td>Apellido paterno y materno, unidos solo si existen (navegación segura para no fallar con nulos)</td></tr><tr><td><code>Fecha_Nacimiento</code>, <code>Fecha_Ingreso</code></td><td>Se quita la parte de hora y queda solo la fecha</td></tr><tr><td><code>Email</code></td><td>Entre todos los correos de la persona, el del <strong>tipo configurado</strong>; si no existe, devuelve vacío en vez de fallar</td></tr><tr><td><code>Cod_Cargo</code>, <code>Txt_Cargo</code></td><td>Código y título del puesto</td></tr><tr><td><code>Cod_Gerencia</code>, <code>Txt_Gerencia</code></td><td>Unidad de negocio y su descripción</td></tr></tbody></table>
+<p><strong>Control de calidad de datos.</strong> Un empleado solo se incluye si tiene documento de identidad, nombre y apellido, para que el sistema externo no reciba registros incompletos.</p>
+<h3 id="decisiones-técnicas-1">Decisiones técnicas</h3>
+<ul>
+<li><strong>Contrato propio en lugar de exponer SuccessFactors tal cual.</strong> El consumidor depende de un formato estable aunque cambie el modelo de origen.</li>
+<li><strong>Tipo de correo como parámetro.</strong> Pasar de correo corporativo a personal es un cambio de configuración.</li>
+<li><strong>Valores seguros por defecto.</strong> Si falta el correo o el segundo apellido, el flujo sigue y devuelve vacío; solo se excluye lo realmente inválido.</li>
+<li><strong>Credenciales y URL externalizadas</strong>, para mover el mismo iFlow entre ambientes.</li>
+</ul>
+<h2 id="stack">Stack</h2>
+<p>SAP CPI · iFlows · HTTPS Sender · ProcessDirect · Timer · Splitter y Gather · Router · Message Mapping · XSLT · Groovy · Value Mapping · SuccessFactors OData v2 · MDF · OAuth2 · JSON y XML</p></article> </main> <footer class="site-footer"> <div class="wrap"> <span>© 2026 Sebastián Poma</span> <span>Los datos de clientes están anonimizados; las capturas usan datos de demostración.</span> </div> </footer> <dialog class="lightbox" id="lightbox" aria-label="Imagen ampliada"><img alt=""></dialog> <script>
+      // Botón de tema: alterna claro/oscuro y recuerda la elección.
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        var root = document.documentElement;
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        function actual() { return root.dataset.theme || (mq.matches ? 'dark' : 'light'); }
+        function etiquetar() {
+          btn.setAttribute('aria-label', actual() === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+        }
+        btn.addEventListener('click', function () {
+          var nuevo = actual() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = nuevo;
+          try { localStorage.setItem('tema', nuevo); } catch (e) {}
+          etiquetar();
+          document.dispatchEvent(new CustomEvent('cambio-tema', { detail: nuevo }));
+        });
+        mq.addEventListener('change', function () {
+          etiquetar();
+          if (!root.dataset.theme) document.dispatchEvent(new CustomEvent('cambio-tema'));
+        });
+        etiquetar();
+      })();
+    </script> <script>
+      // Visor de imágenes: clic para ampliar, clic o Esc para cerrar.
+      (function () {
+        var dlg = document.getElementById('lightbox');
+        if (!dlg) return;
+        var big = dlg.querySelector('img');
+        document.addEventListener('click', function (e) {
+          var img = e.target.closest && e.target.closest('.prose img');
+          if (img) { big.src = img.currentSrc || img.src; big.alt = img.alt; dlg.showModal(); }
+          else if (e.target === dlg || e.target === big) { dlg.close(); }
+        });
+      })();
+    </script> <script type="module">
+        // Dibuja los bloques ```mermaid de los documentos.
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        var blocks = document.querySelectorAll('pre > code.language-mermaid');
+        blocks.forEach(function (code) {
+          var pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.dataset.fuente = code.textContent;
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        function dibujar() {
+          var root = document.documentElement;
+          var dark = root.dataset.theme
+            ? root.dataset.theme === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.querySelectorAll('pre.mermaid').forEach(function (pre) {
+            pre.removeAttribute('data-processed');
+            pre.textContent = pre.dataset.fuente;
+          });
+          mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' });
+          mermaid.run({ querySelector: 'pre.mermaid' });
+        }
+        dibujar();
+        // Redibuja los diagramas cuando cambia el tema.
+        document.addEventListener('cambio-tema', dibujar);
+      </script> </body> </html>

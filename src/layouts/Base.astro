@@ -1,0 +1,135 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  current?: 'inicio' | 'proyecto';
+  diagramas?: boolean;
+}
+const { title, description, current = 'inicio', diagramas = false } = Astro.props;
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      // Aplica el tema guardado antes de pintar, para que no parpadee.
+      try {
+        var t = localStorage.getItem('tema');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <a class="skip" href="#contenido">Saltar al contenido</a>
+    <header class="nav">
+      <div class="wrap">
+        <a class="brand" href="/">Sebastián Poma</a>
+        <nav aria-label="Principal">
+          <a href="/#proyectos" aria-current={current === 'proyecto' ? 'page' : undefined}>Proyectos</a>
+          <a href="/#automatizacion">IA y automatización</a>
+          <a href="/#sobre-mi">Sobre mí</a>
+          <a href="/#contacto">Contacto</a>
+          <a href="https://github.com/Notflay" rel="noopener">GitHub</a>
+          <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Cambiar a modo oscuro">
+            <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.7 14.3A8.5 8.5 0 0 1 9.7 3.3a.7.7 0 0 0-.9-.9A10 10 0 1 0 21.6 15.2a.7.7 0 0 0-.9-.9Z"/></svg>
+            <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></g></svg>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="contenido"><slot /></main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <span>© {new Date().getFullYear()} Sebastián Poma</span>
+        <span>Los datos de clientes están anonimizados; las capturas usan datos de demostración.</span>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" id="lightbox" aria-label="Imagen ampliada"><img alt="" /></dialog>
+
+    <script is:inline>
+      // Botón de tema: alterna claro/oscuro y recuerda la elección.
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        var root = document.documentElement;
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        function actual() { return root.dataset.theme || (mq.matches ? 'dark' : 'light'); }
+        function etiquetar() {
+          btn.setAttribute('aria-label', actual() === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+        }
+        btn.addEventListener('click', function () {
+          var nuevo = actual() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = nuevo;
+          try { localStorage.setItem('tema', nuevo); } catch (e) {}
+          etiquetar();
+          document.dispatchEvent(new CustomEvent('cambio-tema', { detail: nuevo }));
+        });
+        mq.addEventListener('change', function () {
+          etiquetar();
+          if (!root.dataset.theme) document.dispatchEvent(new CustomEvent('cambio-tema'));
+        });
+        etiquetar();
+      })();
+    </script>
+
+    <script is:inline>
+      // Visor de imágenes: clic para ampliar, clic o Esc para cerrar.
+      (function () {
+        var dlg = document.getElementById('lightbox');
+        if (!dlg) return;
+        var big = dlg.querySelector('img');
+        document.addEventListener('click', function (e) {
+          var img = e.target.closest && e.target.closest('.prose img');
+          if (img) { big.src = img.currentSrc || img.src; big.alt = img.alt; dlg.showModal(); }
+          else if (e.target === dlg || e.target === big) { dlg.close(); }
+        });
+      })();
+    </script>
+
+    {diagramas && (
+      <script is:inline type="module">
+        // Dibuja los bloques ```mermaid de los documentos.
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        var blocks = document.querySelectorAll('pre > code.language-mermaid');
+        blocks.forEach(function (code) {
+          var pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.dataset.fuente = code.textContent;
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        function dibujar() {
+          var root = document.documentElement;
+          var dark = root.dataset.theme
+            ? root.dataset.theme === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.querySelectorAll('pre.mermaid').forEach(function (pre) {
+            pre.removeAttribute('data-processed');
+            pre.textContent = pre.dataset.fuente;
+          });
+          mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' });
+          mermaid.run({ querySelector: 'pre.mermaid' });
+        }
+        dibujar();
+        // Redibuja los diagramas cuando cambia el tema.
+        document.addEventListener('cambio-tema', dibujar);
+      </script>
+    )}
+  </body>
+</html>

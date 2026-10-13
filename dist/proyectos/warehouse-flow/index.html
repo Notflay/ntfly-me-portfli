@@ -1,0 +1,356 @@
+<!DOCTYPE html><html lang="es"> <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Warehouse Flow: control de despacho integrado a SAP Business One | Sebastián Poma</title><meta name="description" content="Portal web (React) y API (.NET) para armar despachos en piso: escaneo de productos, asignación de lotes, cambio de lote en caliente y creación del Borrador de Entrega en SAP, siempre a través de Service Layer."><meta name="color-scheme" content="light dark"><script>
+      // Aplica el tema guardado antes de pintar, para que no parpadee.
+      try {
+        var t = localStorage.getItem('tema');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script><meta property="og:title" content="Warehouse Flow: control de despacho integrado a SAP Business One | Sebastián Poma"><meta property="og:description" content="Portal web (React) y API (.NET) para armar despachos en piso: escaneo de productos, asignación de lotes, cambio de lote en caliente y creación del Borrador de Entrega en SAP, siempre a través de Service Layer."><meta property="og:type" content="website"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><link rel="stylesheet" href="/_astro/index.DSAq2taL.css"></head> <body> <a class="skip" href="#contenido">Saltar al contenido</a> <header class="nav"> <div class="wrap"> <a class="brand" href="/">Sebastián Poma</a> <nav aria-label="Principal"> <a href="/#proyectos" aria-current="page">Proyectos</a> <a href="/#automatizacion">IA y automatización</a> <a href="/#sobre-mi">Sobre mí</a> <a href="/#contacto">Contacto</a> <a href="https://github.com/Notflay" rel="noopener">GitHub</a> <button class="theme-toggle" type="button" id="theme-toggle" aria-label="Cambiar a modo oscuro"> <svg class="i-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.7 14.3A8.5 8.5 0 0 1 9.7 3.3a.7.7 0 0 0-.9-.9A10 10 0 1 0 21.6 15.2a.7.7 0 0 0-.9-.9Z"></path></svg> <svg class="i-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"></path></g></svg> </button> </nav> </div> </header> <main id="contenido"> <div class="case-head"> <a class="back" href="/#proyectos">← Todos los proyectos</a> <h1 style="margin-top:16px">Warehouse Flow: control de despacho integrado a SAP Business One</h1> <p class="tagline">Despacho por escaneo con control de lotes, y el Borrador de Entrega creado directo en SAP.</p> <ul class="tags"><li>React</li><li>ASP.NET Web API</li><li>SAP Service Layer</li><li>ADO.NET</li><li>Crystal Reports</li></ul> </div> <article class="prose"><h2 id="qué-resuelve">Qué resuelve</h2>
+<p>SAP Business One no trae una pantalla de despacho por escaneo con control de lotes y cambio de lote en caliente. Este portal agrega esa capa <strong>sin reemplazar a SAP</strong>: SAP sigue siendo la fuente de verdad (órdenes, lotes, stock y documentos) y el portal solo orquesta lecturas y escrituras.</p>
+<p>El personal de despacho toma una <strong>Orden de Venta</strong>, escanea cada producto, asigna el lote del que sale, registra la cantidad realmente despachada y quiénes hicieron el picking. Al terminar, el portal crea en SAP el <strong>Borrador de Entrega</strong>, que sigue su flujo hasta la guía y la factura.</p>
+<pre><code class="language-mermaid">flowchart LR
+    A["Orden de Venta&#x3C;br/>(SAP)"] --> B["Portal: escaneo y&#x3C;br/>asignación de lotes"]
+    B --> C["Borrador de Entrega&#x3C;br/>(SAP)"]
+    C --> D["Guía y factura&#x3C;br/>(SAP)"]
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Acción en el portal</th><th>Objeto de SAP</th><th>Operación</th></tr></thead><tbody><tr><td>Actualizar orden</td><td>Orden de Venta</td><td><code>PATCH</code> de lotes y cantidades por línea</td></tr><tr><td>Procesar orden</td><td>Orden de Venta y Borrador</td><td><code>PATCH</code> y <code>POST</code> del Borrador de Entrega</td></tr><tr><td>Cambio de lote (stock disponible)</td><td>Salida, entrada y traspaso de inventario</td><td><code>POST</code></td></tr><tr><td>Cambio de lote (tomar de la orden)</td><td>Orden de Venta, salida y entrada de inventario</td><td><code>PATCH</code> y <code>POST</code></td></tr></tbody></table>
+<h2 id="arquitectura">Arquitectura</h2>
+<pre><code class="language-mermaid">flowchart TB
+  subgraph Navegador
+    FE["Portal web&#x3C;br/>React + Vite + PrimeReact"]
+  end
+  subgraph Servidor["Servidor de aplicación (IIS)"]
+    API["API de despacho&#x3C;br/>ASP.NET Web API"]
+    CR["Crystal Reports&#x3C;br/>PDF de orden, borrador y factura"]
+  end
+  subgraph SAP["SAP Business One"]
+    SL["Service Layer&#x3C;br/>REST"]
+    DB[("Base de datos SAP")]
+    INT["Tablas y procedimientos&#x3C;br/>intermedios propios"]
+  end
+  FE -- "JSON / HTTP" --> API
+  API -- "Lectura y escritura de documentos" --> SL
+  API -- "Solo lectura y tablas propias" --> DB
+  SL --- DB
+  DB --- INT
+  API --> CR
+</code></pre>
+<h3 id="dos-canales-hacia-sap-con-una-regla-clara">Dos canales hacia SAP, con una regla clara</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Canal</th><th>Para qué se usa</th></tr></thead><tbody><tr><td><strong>Service Layer (REST)</strong></td><td>Crear y modificar documentos de SAP respetando sus validaciones de negocio</td></tr><tr><td><strong>SQL directo (ADO.NET)</strong></td><td>Solo lectura de SAP (listados, lotes, stock, tipo de cambio) y escritura en <strong>tablas propias</strong> del proyecto</td></tr></tbody></table>
+<p><strong>Regla de diseño: nunca se escribe en tablas de SAP por SQL.</strong> Toda escritura sobre documentos pasa por Service Layer.</p>
+<h3 id="capas-del-backend">Capas del backend</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Capa</th><th>Responsabilidad</th></tr></thead><tbody><tr><td>Web API</td><td>Controladores HTTP, CORS y documentación Swagger</td></tr><tr><td>Negocio</td><td>Reglas de despacho e integración con SAP</td></tr><tr><td>Entidades</td><td>Objetos del portal y de Service Layer</td></tr><tr><td>Cliente de Service Layer</td><td>Sesión, reintentos y operaciones <code>GET</code>, <code>PATCH</code> y <code>POST</code></td></tr><tr><td>Acceso a datos</td><td>ADO.NET para consultas y tablas propias</td></tr></tbody></table>
+<h2 id="modo-demo">Modo demo</h2>
+<p>El portal incluye un <strong>modo demo</strong> que reemplaza al backend por datos ficticios con la misma forma de respuesta: 140 órdenes con razón social <code>DEMO - …</code>, vendedores y pickeadores inventados, 22 productos y lotes con el formato real de SAP. Sirve para presentaciones, capacitación y para generar la documentación.</p>
+<p>Dos detalles de diseño:</p>
+<ul>
+<li><strong>Reproducible:</strong> una semilla numérica hace que siempre se generen las mismas órdenes.</li>
+<li><strong>Muestra qué enviaría a SAP:</strong> en modo demo, cada acción registra los mensajes exactos que el backend construiría, sin enviar nada. Eso permite documentar la integración con datos de prueba.</li>
+</ul>
+<h2 id="recorrido-del-portal">Recorrido del portal</h2>
+<figure>
+  <img src="/img/warehouse/01-login.webp" alt="Pantalla de inicio de sesión de Warehouse Flow" loading="lazy">
+  <figcaption>Inicio de sesión.</figcaption>
+</figure>
+<h3 id="listado-de-órdenes">Listado de órdenes</h3>
+<p>Paginado en el servidor, con filtro de texto, chips de estado (<em>Abierto, Cerrado, Pendiente, Validado, Cancelado, Verificado</em>), rango de fechas y exportación a Excel de todas las páginas que cumplen el filtro.</p>
+<figure>
+  <img src="/img/warehouse/03-listado.webp" alt="Listado de órdenes de venta con filtros y estados" loading="lazy">
+  <figcaption>Listado de órdenes con filtros, estados y acceso al PDF y al documento.</figcaption>
+</figure>
+<h3 id="pantalla-de-despacho">Pantalla de despacho</h3>
+<p>Al abrir una orden se muestran sus datos, la tabla de productos (con una fila hija por cada lote asignado), el panel de escaneo y los totales. Es obligatorio elegir al menos un pickeador para poder procesar.</p>
+<figure>
+  <img src="/img/warehouse/08-despacho-inicial.webp" alt="Pantalla de despacho de una orden" loading="lazy">
+  <figcaption>Pantalla de despacho: datos de la orden, productos, escaneo y totales.</figcaption>
+</figure>
+<h3 id="escaneo-con-lotes">Escaneo con lotes</h3>
+<p>El campo de código acepta un lector de código de barras o escritura manual. El portal busca la línea que coincide y que todavía no está completa.</p>
+<ol>
+<li>Se escanea el producto y el panel muestra fila, artículo, lote, unidad, disponible y cantidad.</li>
+<li>Se elige el lote entre los que tienen stock. Si la orden ya tiene cantidad comprometida en un lote, se indica.</li>
+<li>Se digita la cantidad y el lote se suma a la línea, con su barra de progreso.</li>
+</ol>
+<figure>
+  <img src="/img/warehouse/11-seleccion-lote.webp" alt="Selección del lote con serie, vencimiento y disponible" loading="lazy">
+  <figcaption>Selección de lote: serie, vencimiento y stock disponible.</figcaption>
+</figure>
+<figure>
+  <img src="/img/warehouse/14-linea-completa.webp" alt="Línea de la orden completada con su progreso" loading="lazy">
+  <figcaption>Una línea completa muestra su progreso; si queda a medias aparece como incompleta.</figcaption>
+</figure>
+<p>Para artículos sin lote existe un <strong>modo automático</strong>, que registra la cantidad sin pedir lote.</p>
+<figure>
+  <img src="/img/warehouse/16-modo-automatico.webp" alt="Modo automático para artículos sin lote" loading="lazy">
+  <figcaption>Modo automático para artículos sin lote.</figcaption>
+</figure>
+<h3 id="cambio-de-lote-en-caliente">Cambio de lote en caliente</h3>
+<p>Cuando el lote que SAP asignó ya no sirve (vencido, agotado o mal ubicado), el asistente de <strong>cambio de lote</strong> permite reemplazarlo sin salir del despacho. Cada escenario genera documentos de inventario distintos en SAP:</p>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Escenario</th><th>Cuándo se usa</th><th>Efecto en SAP</th></tr></thead><tbody><tr><td><strong>Stock disponible</strong></td><td>Hay stock libre en otro lote del almacén principal</td><td>Salida del lote origen y entrada al lote destino; si la fila es del almacén secundario, además un traspaso</td></tr><tr><td><strong>Tomar de la orden</strong></td><td>Reasignar cantidad que la misma orden ya tiene comprometida en otro lote</td><td>Se resta la cantidad de la orden, más salida y entrada en el mismo almacén</td></tr></tbody></table>
+<p>Reglas del asistente: hay que elegir lote origen y destino, <strong>nunca se permiten lotes vencidos</strong> y la cantidad no puede ser cero ni superar lo solicitado.</p>
+<figure>
+  <img src="/img/warehouse/18-transfer-stock-disponible.webp" alt="Asistente de cambio de lote con stock disponible" loading="lazy">
+  <figcaption>Cambio de lote con stock disponible.</figcaption>
+</figure>
+<figure>
+  <img src="/img/warehouse/19-transfer-tomar-de-la-ov.webp" alt="Asistente de cambio de lote tomando de la orden de venta" loading="lazy">
+  <figcaption>Cambio de lote tomando de lo comprometido en la misma orden.</figcaption>
+</figure>
+<h3 id="actualizar-y-procesar">Actualizar y procesar</h3>
+<ul>
+<li><strong>Actualizar</strong> guarda el avance en SAP sin cerrar el despacho, para no perder lo escaneado si se corta la jornada o si otro despachador continúa.</li>
+<li><strong>Procesar</strong> cierra el despacho: valida los pickeadores, registra la hora de fin, envía todo a SAP y termina creando el Borrador de Entrega. Pide confirmación.</li>
+</ul>
+<figure>
+  <img src="/img/warehouse/25-confirmar-procesar.webp" alt="Diálogo de confirmación antes de procesar la orden" loading="lazy">
+  <figcaption>Confirmación antes de procesar.</figcaption>
+</figure>
+<p>Tras procesar, la orden queda <strong>Pendiente</strong> y muestra el botón del Borrador de Entrega creado en SAP.</p>
+<figure>
+  <img src="/img/warehouse/27-listado-pendientes.webp" alt="Listado filtrado por órdenes pendientes con su documento" loading="lazy">
+  <figcaption>Órdenes pendientes, cada una con su Borrador de Entrega.</figcaption>
+</figure>
+<h3 id="en-el-móvil">En el móvil</h3>
+<p>El diseño es adaptable: el riel lateral pasa a barra inferior y los bloques se apilan, con el escaneo primero.</p>
+<div class="trio">
+  <figure><img src="/img/warehouse/90-movil-login.webp" alt="Inicio de sesión en móvil" loading="lazy"></figure>
+  <figure><img src="/img/warehouse/91-movil-listado.webp" alt="Listado de órdenes en móvil" loading="lazy"></figure>
+  <figure><img src="/img/warehouse/92-movil-despacho.webp" alt="Pantalla de despacho en móvil" loading="lazy"></figure>
+</div>
+<h2 id="qué-pasa-en-sap-al-procesar-una-orden">Qué pasa en SAP al procesar una orden</h2>
+<p>El flujo de <em>Procesar</em> encadena lecturas, validaciones y escrituras, siempre por Service Layer para los documentos:</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant P as Portal
+    participant A as API
+    participant Q as SQL (tablas propias)
+    participant S as Service Layer
+    P->>A: Procesar orden
+    A->>Q: Validar tipo de cambio del día
+    A->>S: GET Orders(id)
+    A->>Q: Guardar cantidades seleccionadas
+    A->>S: PATCH Orders(id) con lotes y cantidades
+    A->>S: POST Drafts (Borrador de Entrega)
+    A-->>P: Orden en estado Pendiente
+</code></pre>
+<p>Ejemplo simplificado, con valores ficticios, de lo que se envía para crear el Borrador de Entrega. Cada línea apunta a su línea de origen en la orden y lleva los lotes con la cantidad que salió de cada uno:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" style="background-color:#fff;--shiki-dark-bg:#24292e;color:#24292e;--shiki-dark:#e1e4e8; overflow-x: auto;" tabindex="0" data-language="json"><code><span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">POST Drafts</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">{</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  "DocObjectCode"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"oDeliveryNotes"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  "CardCode"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"C-DEMO-001"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">  "DocumentLines"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    {</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">      "BaseType"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">17</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">      "BaseEntry"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">7138</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">      "BaseLine"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">0</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">      "Quantity"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">36</span><span style="color:#24292E;--shiki-dark:#E1E4E8">,</span></span>
+<span class="line"><span style="color:#005CC5;--shiki-dark:#79B8FF">      "BatchNumbers"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: [</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        { </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"BatchNumber"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"LOTE-A"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"Quantity"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">18</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"BaseLineNumber"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">0</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> },</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">        { </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"BatchNumber"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#032F62;--shiki-dark:#9ECBFF">"LOTE-B"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"Quantity"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">18</span><span style="color:#24292E;--shiki-dark:#E1E4E8">, </span><span style="color:#005CC5;--shiki-dark:#79B8FF">"BaseLineNumber"</span><span style="color:#24292E;--shiki-dark:#E1E4E8">: </span><span style="color:#005CC5;--shiki-dark:#79B8FF">0</span><span style="color:#24292E;--shiki-dark:#E1E4E8"> }</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">      ]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">    }</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">  ]</span></span>
+<span class="line"><span style="color:#24292E;--shiki-dark:#E1E4E8">}</span></span></code></pre>
+<h2 id="decisiones-técnicas">Decisiones técnicas</h2>
+<ul>
+<li><strong>SAP como fuente de verdad.</strong> El portal no guarda copias permanentes de las órdenes: solo el avance del despacho y una foto original de la orden.</li>
+<li><strong>Escritura solo por Service Layer.</strong> Así se respetan las validaciones de negocio de SAP y no hay riesgo de dejar documentos inconsistentes.</li>
+<li><strong>Las líneas se identifican por número de línea, no por artículo.</strong> Un mismo artículo puede repetirse en varias líneas de una orden.</li>
+<li><strong>Solo viaja lo despachado.</strong> Las líneas con cantidad cero no entran al Borrador y los lotes con cantidad cero no se reenvían.</li>
+<li><strong>Sesión con Service Layer resiliente.</strong> Hasta 3 intentos con espera; ante una sesión vencida o una conexión cortada, vuelve a iniciar sesión y reintenta.</li>
+<li><strong>Reemplazo de colecciones en <code>PATCH</code>.</strong> Se usa la cabecera de SAP que reemplaza las colecciones enviadas; por eso, al enviar los lotes de una línea, SAP sustituye todos los lotes de esa línea por los enviados.</li>
+<li><strong>Sin tipo de cambio del día no se escribe nada en SAP</strong>, ni al actualizar, ni al procesar, ni al traspasar.</li>
+<li><strong>Dos almacenes.</strong> Los lotes que dejan de usarse en el secundario retornan al principal.</li>
+<li><strong>El responsable queda registrado.</strong> Cada movimiento lleva en SAP al usuario del portal que lo hizo, mediante campos de usuario.</li>
+</ul>
+<h3 id="manejo-de-errores-de-sap">Manejo de errores de SAP</h3>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<table><thead><tr><th>Situación</th><th>Qué hace el sistema</th></tr></thead><tbody><tr><td>El lote ya no existe o está agotado (error <code>480000112</code>)</td><td>Si falla el <code>PATCH</code> masivo, <strong>reintenta línea por línea</strong>. Las líneas válidas quedan aplicadas, se informa exactamente qué línea y lote falló, y no se crea el Borrador hasta corregirlo</td></tr><tr><td>Cantidad del lote ya comprometida (error <code>10001152</code>)</td><td>Mensaje claro con artículo y lote para que el usuario decida si cambia lo comprometido</td></tr><tr><td>Stock insuficiente (error <code>10001153</code>)</td><td>Diálogo con el artículo y el lote, y un botón <strong>Ir al producto</strong> para cambiar de lote</td></tr><tr><td>Tipo de cambio del día sin cargar</td><td>Se bloquea la operación con un mensaje claro</td></tr><tr><td>Sesión de Service Layer vencida</td><td>Nuevo inicio de sesión automático y hasta 3 reintentos</td></tr></tbody></table>
+<h3 id="trazabilidad">Trazabilidad</h3>
+<p>El backend escribe dos archivos de registro por día: uno con <strong>cada llamada a Service Layer</strong> (URL, JSON enviado y respuesta de SAP) y otro con las trazas de negocio, que indican qué líneas y lotes se cambian, se remueven o retornan. Es la herramienta principal para diagnosticar cualquier diferencia entre lo que el portal envió y lo que SAP aplicó.</p>
+<h2 id="stack">Stack</h2>
+<p>React 18 · Vite · PrimeReact · Axios · ASP.NET Web API (.NET Framework) · RestSharp · ADO.NET · SAP Service Layer · SAP Business One (HANA y SQL Server) · Crystal Reports · IIS</p></article> </main> <footer class="site-footer"> <div class="wrap"> <span>© 2026 Sebastián Poma</span> <span>Los datos de clientes están anonimizados; las capturas usan datos de demostración.</span> </div> </footer> <dialog class="lightbox" id="lightbox" aria-label="Imagen ampliada"><img alt=""></dialog> <script>
+      // Botón de tema: alterna claro/oscuro y recuerda la elección.
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        if (!btn) return;
+        var root = document.documentElement;
+        var mq = window.matchMedia('(prefers-color-scheme: dark)');
+        function actual() { return root.dataset.theme || (mq.matches ? 'dark' : 'light'); }
+        function etiquetar() {
+          btn.setAttribute('aria-label', actual() === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+        }
+        btn.addEventListener('click', function () {
+          var nuevo = actual() === 'dark' ? 'light' : 'dark';
+          root.dataset.theme = nuevo;
+          try { localStorage.setItem('tema', nuevo); } catch (e) {}
+          etiquetar();
+          document.dispatchEvent(new CustomEvent('cambio-tema', { detail: nuevo }));
+        });
+        mq.addEventListener('change', function () {
+          etiquetar();
+          if (!root.dataset.theme) document.dispatchEvent(new CustomEvent('cambio-tema'));
+        });
+        etiquetar();
+      })();
+    </script> <script>
+      // Visor de imágenes: clic para ampliar, clic o Esc para cerrar.
+      (function () {
+        var dlg = document.getElementById('lightbox');
+        if (!dlg) return;
+        var big = dlg.querySelector('img');
+        document.addEventListener('click', function (e) {
+          var img = e.target.closest && e.target.closest('.prose img');
+          if (img) { big.src = img.currentSrc || img.src; big.alt = img.alt; dlg.showModal(); }
+          else if (e.target === dlg || e.target === big) { dlg.close(); }
+        });
+      })();
+    </script> <script type="module">
+        // Dibuja los bloques ```mermaid de los documentos.
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        var blocks = document.querySelectorAll('pre > code.language-mermaid');
+        blocks.forEach(function (code) {
+          var pre = document.createElement('pre');
+          pre.className = 'mermaid';
+          pre.dataset.fuente = code.textContent;
+          pre.textContent = code.textContent;
+          code.parentElement.replaceWith(pre);
+        });
+        function dibujar() {
+          var root = document.documentElement;
+          var dark = root.dataset.theme
+            ? root.dataset.theme === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.querySelectorAll('pre.mermaid').forEach(function (pre) {
+            pre.removeAttribute('data-processed');
+            pre.textContent = pre.dataset.fuente;
+          });
+          mermaid.initialize({ startOnLoad: false, theme: dark ? 'dark' : 'neutral', securityLevel: 'strict' });
+          mermaid.run({ querySelector: 'pre.mermaid' });
+        }
+        dibujar();
+        // Redibuja los diagramas cuando cambia el tema.
+        document.addEventListener('cambio-tema', dibujar);
+      </script> </body> </html>
